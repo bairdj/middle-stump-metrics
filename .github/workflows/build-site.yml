@@ -50,7 +50,7 @@ jobs:
         with:
           name: output.db
       - name: Print artifact contents
-        run: ls -R ${{ steps.download.outputs.download-path }}
+        run: ls -l ${{ steps.download.outputs.download-path }}
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
       - name: Install additional libraries
