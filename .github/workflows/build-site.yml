@@ -17,12 +17,21 @@ jobs:
         run: |
           wget https://cricsheet.org/downloads/tests_male_json.zip
           wget https://cricsheet.org/register/people.csv
+      - name: Check if DB needs rebuilding
+        id: check-db-cache
+        uses: actions/cache@v3
+        with:
+          path: output.db
+          key: ${{ hashFiles('tests_male_json.zip', 'people.csv') }}
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
+        if: steps.check-db-cache.outputs.cache-hit != 'true'
       - name: Install dependencies
         run: dotnet restore
+        if: steps.check-db-cache.outputs.cache-hit != 'true'
       - name: Run
         run: dotnet run --register people.csv tests_male_json.zip output.db
+        if: steps.check-db-cache.outputs.cache-hit != 'true'
       - name: Upload database
         uses: actions/upload-artifact@v3
         with:
