@@ -1,5 +1,7 @@
 name: build-site
-on: workflow_dispatch
+on:
+  push:
+    branches: [ actions ]
 jobs:
   load-data:
     runs-on: ubuntu-latest
