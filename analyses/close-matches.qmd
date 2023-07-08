@@ -30,7 +30,7 @@ wicket_threshold <- 2
 run_threshold <- 20
 
 close_matches <-
-  db$table("match") |>
+  db$table("Match") |>
   filter(
     WinWickets <= wicket_threshold | WinRuns <= run_threshold,
     !WinByInnings
@@ -135,13 +135,13 @@ Some matches could end up in both categories.
 
 ```{r}
 draws <-
-  db$table("match") |>
+  db$table("Match") |>
   filter(Result == "draw") |>
   select(MatchId)
 
 # Number of runs per innings
 innings_runs <-
-  db$table("delivery") |>
+  db$table("Delivery") |>
   summarise(
     innings_runs = sum(TotalRuns),
     .by = c(MatchId, InningsNumber)
@@ -150,7 +150,7 @@ innings_runs <-
 # Total team runs per match
 team_runs <-
   innings_runs |>
-  inner_join(db$table("innings"), c("MatchId", "InningsNumber")) |>
+  inner_join(db$table("Innings"), c("MatchId", "InningsNumber")) |>
   summarise(
     team_runs = sum(innings_runs),
     .by = c(MatchId, BattingTeam)
@@ -176,7 +176,7 @@ run_difference <-
 ```{r}
 # Identify 8 wickets in 4th innings
 close_draw_wickets <-
-  db$table("wicket") |>
+  db$table("Wicket") |>
   semi_join(draws, "MatchId") |>
   filter(InningsNumber == 4) |>
   count(MatchId) |>
@@ -185,7 +185,7 @@ close_draw_wickets <-
 
 close_draw_wickets |>
   left_join(run_difference, "MatchId") |>
-  inner_join(db$table("match"), "MatchId") |>
+  inner_join(db$table("Match"), "MatchId") |>
   collect() |>
   arrange(desc(wickets), run_diff, desc(StartDate)) |>
   select(StartDate, Venue, Team1, Team2, wickets, run_diff) |>
@@ -203,12 +203,18 @@ close_draw_wickets |>
 ## Fewer than 20 runs behind
 
 ```{r}
+# The match must have been in the 4th innings
+four_innings_matches <- db$table("Innings") |>
+  filter(InningsNumber == 4) |>
+  select(MatchId)
+
 close_draw_runs <-
   run_difference |>
   semi_join(draws, "MatchId") |>
+  semi_join(four_innings_matches, "MatchId") |>
   filter(run_diff <= 20) |>
   select(MatchId, run_diff) |>
-  inner_join(db$table("match"), "MatchId") |>
+  inner_join(db$table("Match"), "MatchId") |>
   select(
     StartDate,
     Venue,

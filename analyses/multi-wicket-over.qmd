@@ -15,19 +15,19 @@ library(ggplot2)
 source(here("R", "model.R"))
 source(here("R", "plot.R"))
 
-db <- Model$new("C:\\Users\\jbair\\dev\\parse-cricsheet\\output3.db")
+db <- Model$new()
 ```
 
 # Frequency
 
 ```{r}
 wickets_per_over <-
-  db$table("wicket") |>
+  db$table("Wicket") |>
   group_by(MatchId, InningsNumber, Over) |>
   summarise(n_wickets = n(), .groups = "drop")
 
 all_overs <-
-  db$table("delivery") |>
+  db$table("Delivery") |>
   distinct(MatchId, InningsNumber, Over) |>
   left_join(wickets_per_over, join_by(MatchId, InningsNumber, Over)) |>
   mutate(n_wickets = coalesce(n_wickets, 0))
@@ -85,7 +85,7 @@ wickets_per_over |>
   filter(n_wickets > 1) |>
   count(MatchId) |>
   left_join(
-    db$table("match"),
+    db$table("Match"),
     "MatchId"
   ) |>
   select(
@@ -127,7 +127,7 @@ ineligible_methods <- c(
 )
 
 eligible_wickets <-
-  db$table("wicket") |>
+  db$table("Wicket") |>
   filter(!Kind %in% ineligible_methods) |>
   group_by(MatchId, InningsNumber, Over) |>
   filter(n() > 1) |>
@@ -141,7 +141,7 @@ bowler_wicket_overs <-
 
 # Count total number of overs bowled per bowler
 all_bowler_overs <-
-  db$table("delivery") |>
+  db$table("Delivery") |>
     distinct(MatchId, InningsNumber, Over, Bowler) |>
     left_join(
       bowler_wicket_overs,
@@ -160,7 +160,7 @@ multi_bowler_summary <-
     mutate(multi_prop = n_multi / as.double(n_overs)) |>
     filter(n_multi > 1) |>
     left_join(
-      db$table("player"),
+      db$table("Player"),
       join_by(Bowler == PlayerId)
     ) |>
     select(Name, n_overs, n_multi, multi_prop) |>
