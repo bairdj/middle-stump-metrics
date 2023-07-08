@@ -1,7 +1,7 @@
 name: build-site
 on:
   push:
-    branches: [ actions ]
+    branches: [ actions, main ]
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch: {}
