@@ -44,6 +44,13 @@ jobs:
       RENV_PATHS_ROOT: ~/.local/share/renv
     steps:
       - uses: actions/checkout@v3
+      - name: Load data artifact
+        uses: actions/download-artifact@v2
+        id: download
+        with:
+          name: output.db
+      - name: Print artifact contents
+        run: ls -R ${{ steps.download.outputs.download-path }}
       - name: Setup R
         uses: r-lib/actions/setup-r@v2
       - name: Install additional libraries
@@ -59,11 +66,6 @@ jobs:
       - name: Restore renv
         shell: Rscript {0}
         run: renv::restore()
-      - name: Load data artifact
-        uses: actions/download-artifact@v2
-        id: download
-        with:
-          name: output.db
       - name: Install Quarto
         uses: quarto-dev/quarto-actions/setup@v2
       - name: Render site
