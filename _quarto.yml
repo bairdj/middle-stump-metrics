@@ -14,7 +14,7 @@ website:
           - analyses/batting-collapses.qmd
           - analyses/close-matches.qmd
           - analyses/multi-wicket-over.qmd
-          - analyses/similar-innings.qmd
+          - analyses/best-spells.qmd
 
 
 format:

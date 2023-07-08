@@ -1,0 +1,116 @@
+---
+title: Best bowling spells
+author: James Baird
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(here)
+library(dplyr)
+library(dbplyr)
+library(purrr)
+library(tidyr)
+library(gt)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+
+db <- Model$new()
+```
+
+```{r}
+# Identify balls that had a wicket
+wickets <- db$table("Wicket") |>
+  filter(!Kind %in% !!get_non_bowler_dismissals()) |>
+  select(MatchId, InningsNumber, Over, Ball) |>
+  mutate(wicket = TRUE)
+
+# Get cumulative wickets and runs conceded, then identify
+# the point at which each wicket fell
+cumulative_bowling <-
+  db$table("Delivery") |>
+  left_join(wickets, join_by(MatchId, InningsNumber, Over, Ball)) |>
+  mutate(wicket = coalesce(wicket, FALSE)) |>
+  # Create a window over each bowler's deliveries per innings
+  group_by(MatchId, InningsNumber, Bowler) |>
+  window_order(Over, Ball) |>
+  mutate(
+    bowler_ball = row_number(),
+    cum_wickets = cumsum(wicket),
+    cum_runs_conceded = cumsum(BatterRuns + NoBalls + Wides)
+  ) |>
+  group_by(MatchId, InningsNumber, Bowler, cum_wickets) |>
+  summarise(
+    across(
+      c(cum_runs_conceded, bowler_ball),
+      min
+    ),
+    .groups = "drop_last"
+  ) |>
+  filter(cum_wickets > 0) |>
+  collect()
+
+# Create lag expressions to identify the runs and balls since
+# previous wickets. Run lag over 1 (i.e. last wicket) to 9
+
+lag_exprs <- map(2:10,
+  function(n_streak) {
+    col_pattern <- paste0("lag_{.col}_", n_streak)
+    n_lag <- n_streak - 1
+    rlang::expr(
+      across(
+        c(cum_runs_conceded, bowler_ball),
+        ~ .x - lag(.x, n = !!n_lag),
+        .names = !!col_pattern
+      )
+    )
+  }
+)
+
+cumulative_bowling |>
+  arrange(cum_wickets) |>
+  mutate(!!!lag_exprs) |>
+  ungroup() |>
+  select(MatchId, InningsNumber, Bowler, starts_with("lag_")) |>
+  pivot_longer(
+    starts_with("lag_"),
+    names_to = c(".value", "n_streak"),
+    names_pattern = "lag_(\\D+)_(\\d+)",
+    names_transform = list(n_streak = as.integer),
+    values_drop_na = TRUE
+  ) |>
+  filter(n_streak > 3) |>
+  group_by(n_streak) |>
+  slice_min(
+    order_by = tibble(cum_runs_conceded, bowler_ball),
+    n = 10
+  ) |>
+  inner_join(
+    collect(db$table("Match")),
+    join_by(MatchId)
+  ) |>
+  inner_join(
+    collect(db$table("Player")),
+    join_by(Bowler == PlayerId)
+  ) |>
+  # Add an extra ball to include the wicket ball
+  mutate(bowler_ball = bowler_ball + 1) |>
+  select(
+    n_streak,
+    StartDate,
+    Venue,
+    BowlerName = Name,
+    bowler_ball,
+    cum_runs_conceded
+  ) |>
+  mutate(n_streak = paste0(n_streak, " wickets")) |>
+  gt() |>
+  fmt_date(StartDate, date_style = 7) |>
+  common_label() |>
+  cols_label(
+    BowlerName = "Bowler",
+    bowler_ball = "Balls",
+    cum_runs_conceded = "Runs conceded"
+  )
+```
