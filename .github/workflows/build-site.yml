@@ -69,7 +69,7 @@ jobs:
       - name: Render site
         uses: quarto-dev/quarto-actions/render@v2
         env:
-          DB_LOCATION: ${{ steps.download.outputs.download-path }}
+          DB_LOCATION: ${{ steps.download.outputs.download-path }}/output.db
         with:
           to: html
       - name: Upload site artifact
