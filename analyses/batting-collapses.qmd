@@ -23,11 +23,11 @@ length window over all wickets, therefore, each wicket may be counted
 as part of different collapses.
 
 ```{r}
-wickets <- db$table("wicket") |>
+wickets <- db$table("Wicket") |>
   count(MatchId, InningsNumber, Over, Ball, name = "wickets")
 
 innings_progression <-
-  db$table("delivery") |>
+  db$table("Delivery") |>
   left_join(wickets, by = c("MatchId", "InningsNumber", "Over", "Ball")) |>
   mutate(wickets = coalesce(wickets, 0)) |>
   group_by(MatchId, InningsNumber) |>
@@ -69,8 +69,8 @@ innings_progression |>
   filter(collapse_wickets >= 5) |>
   group_by(collapse_wickets) |>
   slice_min(runs, n = 10, with_ties = TRUE) |>
-  inner_join(collect(db$table("innings")), by = c("MatchId", "InningsNumber")) |>
-  inner_join(collect(db$table("match")), by = "MatchId") |>
+  inner_join(collect(db$table("Innings")), by = c("MatchId", "InningsNumber")) |>
+  inner_join(collect(db$table("Match")), by = "MatchId") |>
   select(
     StartDate,
     Venue,

@@ -68,16 +68,6 @@ jobs:
       - name: Restore renv
         shell: Rscript {0}
         run: renv::restore()
-      - name: Debug DB connection
-        env:
-          DB_LOCATION: ${{ steps.download.outputs.download-path }}/output.db
-        shell: Rscript {0}
-        run: |
-          source("R/model.R")
-          db <- Model$new()
-          print(db)
-          print(db$connection)
-          DBI::dbListTables(db$connection)
       - name: Install Quarto
         uses: quarto-dev/quarto-actions/setup@v2
       - name: Render site
