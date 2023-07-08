@@ -1,0 +1,231 @@
+---
+title: Close matches
+author: James Baird
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(here)
+library(dplyr)
+library(gt)
+library(tidyr)
+source(here("R", "model.R"))
+
+db <- Model$new()
+```
+
+# Close wins
+
+A close win is defined as:
+
+- Winning by 2 or fewer wickets.
+- Winning by 20 or fewer runs.
+
+```{r}
+#| label: close-matches
+
+wicket_threshold <- 2
+run_threshold <- 20
+
+close_matches <-
+  db$table("match") |>
+  filter(
+    WinWickets <= wicket_threshold | WinRuns <= run_threshold,
+    !WinByInnings
+  )
+```
+
+```{r}
+#| label: recent-close-wins
+
+winner_style <-
+  list(
+    cell_text(weight = "bold"),
+    cell_fill(color = "#e6ffe6")
+  )
+
+close_matches |>
+  transmute(
+    StartDate,
+    Venue,
+    Team1,
+    Team2,
+    Winner,
+    Result = case_when(
+      !is.na(WinWickets) ~ paste0(WinWickets, " wickets"),
+      !is.na(WinRuns) ~ paste0(WinRuns, " runs")
+    )
+  ) |>
+  arrange(desc(StartDate)) |>
+  gt() |>
+  tab_style(
+    style = winner_style,
+    locations = cells_body(
+      columns = Team1,
+      rows = Winner == Team1
+    )
+  ) |>
+  tab_style(
+    style = winner_style,
+    locations = cells_body(
+      columns = Team2,
+      rows = Winner == Team2
+    )
+  ) |>
+  fmt_date(columns = StartDate, date_style = 7) |>
+  # Hide winner column
+  cols_hide(columns = Winner) |>
+  tab_header(
+    title = "Most recent close wins",
+    subtitle = "Matches won by 2 or fewer wickets, or 20 or fewer runs."
+  )
+```
+
+```{r}
+#| label: close-matches-by-team
+
+close_matches |>
+  select(MatchId, Team1, Team2, Winner) |>
+  pivot_longer(
+    c(Team1, Team2),
+    names_to = "index",
+    values_to = "team"
+  ) |>
+  mutate(won = Winner == team) |>
+  group_by(team) |>
+  summarise(
+    n_matches = n(),
+    n_wins = sum(won),
+    win_pct = mean(won)
+  ) |>
+  arrange(desc(win_pct)) |>
+  collect() |>
+  gt() |>
+  fmt_percent(columns = win_pct, decimals = 1) |>
+  data_color(
+    columns = win_pct,
+    palette = "Greens"
+  ) |>
+  cols_label(
+    team = "Team",
+    n_matches = "Close Matches",
+    n_wins = "Wins",
+    win_pct = "Win %"
+  ) |>
+  tab_header(
+    title = "Team performance in close matches",
+    subtitle = "Matches won by 2 or fewer wickets, or 20 or fewer runs."
+  )
+```
+
+# Close draws
+
+A close draw is defined as:
+
+- Team being 8 or more wickets down at the end of the 4th innings.
+- Team being 20 or fewer runs behind at the end of the 4th innings.
+
+Note that retired hurt dismissals are counted as wickets, as it is
+assumed that the player would not have returned, and therefore the
+match would have ended.
+
+Some matches could end up in both categories.
+
+```{r}
+draws <-
+  db$table("match") |>
+  filter(Result == "draw") |>
+  select(MatchId)
+
+# Number of runs per innings
+innings_runs <-
+  db$table("delivery") |>
+  summarise(
+    innings_runs = sum(TotalRuns),
+    .by = c(MatchId, InningsNumber)
+  )
+
+# Total team runs per match
+team_runs <-
+  innings_runs |>
+  inner_join(db$table("innings"), c("MatchId", "InningsNumber")) |>
+  summarise(
+    team_runs = sum(innings_runs),
+    .by = c(MatchId, BattingTeam)
+  )
+
+# Run difference between teams per match
+run_difference <-
+  team_runs |>
+  mutate(team_id = row_number(), .by = MatchId) |>
+  select(-BattingTeam) |>
+  pivot_wider(
+    names_from = team_id,
+    values_from = team_runs,
+    names_prefix = "team_"
+  ) |>
+  mutate(
+    run_diff = abs(team_1 - team_2)
+  )
+```
+
+## At least 8 wickets down
+
+```{r}
+# Identify 8 wickets in 4th innings
+close_draw_wickets <-
+  db$table("wicket") |>
+  semi_join(draws, "MatchId") |>
+  filter(InningsNumber == 4) |>
+  count(MatchId) |>
+  filter(n >= 8) |>
+  select(MatchId, wickets = n)
+
+close_draw_wickets |>
+  left_join(run_difference, "MatchId") |>
+  inner_join(db$table("match"), "MatchId") |>
+  collect() |>
+  arrange(desc(wickets), run_diff, desc(StartDate)) |>
+  select(StartDate, Venue, Team1, Team2, wickets, run_diff) |>
+  gt() |>
+  fmt_date(columns = StartDate, date_style = 7) |>
+  cols_label(
+    wickets = "Wickets",
+    run_diff = "Run Difference",
+    StartDate = "Date",
+    Team1 = "Team 1",
+    Team2 = "Team 2"
+  )
+```
+
+## Fewer than 20 runs behind
+
+```{r}
+close_draw_runs <-
+  run_difference |>
+  semi_join(draws, "MatchId") |>
+  filter(run_diff <= 20) |>
+  select(MatchId, run_diff) |>
+  inner_join(db$table("match"), "MatchId") |>
+  select(
+    StartDate,
+    Venue,
+    Team1,
+    Team2,
+    run_diff
+  ) |>
+  collect()
+
+close_draw_runs |>
+  arrange(run_diff, desc(StartDate)) |>
+  gt() |>
+  fmt_date(columns = StartDate, date_style = 7) |>
+  cols_label(
+    run_diff = "Run Difference",
+    StartDate = "Date",
+    Team1 = "Team 1",
+    Team2 = "Team 2"
+  )
+```

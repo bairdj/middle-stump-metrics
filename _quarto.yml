@@ -1,0 +1,29 @@
+project:
+  type: website
+  execute-dir: project
+
+website:
+  title: Middle Stump Metrics
+  navbar:
+    background: primary
+  sidebar:
+    style: docked
+    contents:
+      - section: Analyses
+        contents:
+          - analyses/batting-collapses.qmd
+          - analyses/close-matches.qmd
+          - analyses/multi-wicket-over.qmd
+          - analyses/similar-innings.qmd
+
+
+format:
+  html:
+    theme:
+      - cosmo
+      - custom.scss
+    toc: true
+    code-fold: true
+
+execute:
+  warning: false

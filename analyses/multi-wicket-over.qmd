@@ -1,0 +1,189 @@
+---
+title: Multi-wicket overs
+author: James Baird
+---
+
+A multi-wicket over is one in which two or more wickets are taken.
+
+```{r}
+#| label: setup
+#| include: false
+library(here)
+library(dplyr)
+library(gt)
+library(ggplot2)
+source(here("R", "model.R"))
+source(here("R", "plot.R"))
+
+db <- Model$new("C:\\Users\\jbair\\dev\\parse-cricsheet\\output3.db")
+```
+
+# Frequency
+
+```{r}
+wickets_per_over <-
+  db$table("wicket") |>
+  group_by(MatchId, InningsNumber, Over) |>
+  summarise(n_wickets = n(), .groups = "drop")
+
+all_overs <-
+  db$table("delivery") |>
+  distinct(MatchId, InningsNumber, Over) |>
+  left_join(wickets_per_over, join_by(MatchId, InningsNumber, Over)) |>
+  mutate(n_wickets = coalesce(n_wickets, 0))
+
+multi_prop <-
+  all_overs |>
+  summarise(multi_prop = mean(n_wickets > 1)) |>
+  pull(multi_prop)
+
+all_overs |>
+  count(n_wickets) |>
+  collect() |>
+  mutate(prop = n / sum(n)) |>
+  gt() |>
+  fmt_integer(n) |>
+  fmt_percent(prop) |>
+  cols_merge_n_pct(n, prop) |>
+  cols_label(n_wickets = "Wickets in over", prop = "N (%) of overs")
+```
+
+Multiple wickets in an over is a rare event, occurring in only
+`r signif(multi_prop * 100, 2)`% of overs in the database.
+
+However, given that a typical match has hundreds of overs, the occurrence
+of at least one multi-wicket over in a match is quite common. 
+
+```{r}
+n_multi_wickets <-
+  all_overs |>
+    group_by(MatchId) |>
+    summarise(
+      n_multi = sum(n_wickets > 1),
+      .groups = "drop"
+    ) |>
+    count(n_multi) |>
+    collect()
+
+n_multi_wickets |>
+  ggplot(aes(x = n_multi, y = n)) +
+  geom_col(fill = "#004C97") +
+  labs(
+    x = "Number of multi-wicket overs",
+    y = "Number of matches",
+    title = "Number of multi-wicket overs in match"
+  ) +
+  scale_x_continuous(breaks = ~ seq(0, .x[2], 1)) +
+  theme_cricket()
+```
+
+# Matches with the most multi-wicket overs
+
+```{r}
+#| label: matches
+wickets_per_over |>
+  filter(n_wickets > 1) |>
+  count(MatchId) |>
+  left_join(
+    db$table("match"),
+    "MatchId"
+  ) |>
+  select(
+    StartDate,
+    Team1,
+    Team2,
+    Venue,
+    n
+  ) |>
+  filter(n >= 3) |>
+  arrange(desc(n), desc(StartDate)) |>
+  collect() |>
+  gt() |>
+  fmt_integer(n) |>
+  fmt_date(
+    StartDate,
+    date_style = "day_month_year" 
+  ) |>
+  cols_label(
+    Venue = "Venue",
+    StartDate = "Date",
+    Team1 = "Team 1",
+    Team2 = "Team 2",
+    n = "Number of overs with multiple wickets"
+  ) |>
+  opt_interactive()
+```
+
+# Bowlers with the most multi-wicket overs
+
+Whereas the previous figures included all wickets in an over,
+the following figures only include wickets credited to the bowler.
+
+```{r}
+ineligible_methods <- c(
+  "retired hurt",
+  "retired not out",
+  "run out"
+)
+
+eligible_wickets <-
+  db$table("wicket") |>
+  filter(!Kind %in% ineligible_methods) |>
+  group_by(MatchId, InningsNumber, Over) |>
+  filter(n() > 1) |>
+  ungroup()
+
+# Get distinct overs per bowler
+bowler_wicket_overs <-
+  eligible_wickets |>
+    group_by(MatchId, InningsNumber, Over, Bowler) |>
+    summarise(n_wickets_in_over = n(), .groups = "drop")
+
+# Count total number of overs bowled per bowler
+all_bowler_overs <-
+  db$table("delivery") |>
+    distinct(MatchId, InningsNumber, Over, Bowler) |>
+    left_join(
+      bowler_wicket_overs,
+      join_by(MatchId, InningsNumber, Over, Bowler)
+    ) |>
+    mutate(n_wickets_in_over = coalesce(n_wickets_in_over, 0))
+
+
+multi_bowler_summary <-
+  all_bowler_overs |>
+    group_by(Bowler) |>
+    summarise(
+      n_overs = n(),
+      n_multi = sum(n_wickets_in_over > 1)
+    ) |>
+    mutate(multi_prop = n_multi / as.double(n_overs)) |>
+    filter(n_multi > 1) |>
+    left_join(
+      db$table("player"),
+      join_by(Bowler == PlayerId)
+    ) |>
+    select(Name, n_overs, n_multi, multi_prop) |>
+    arrange(desc(n_multi)) |>
+    collect()
+  
+multi_bowler_summary |> 
+  gt() |>
+  fmt_integer(n_overs, n_multi) |>
+  fmt_percent(multi_prop) |>
+  data_color(
+    c(multi_prop, n_multi),
+    palette = "Greens"
+  ) |>
+  cols_label(
+    Name = "Bowler",
+    n_overs = "Overs bowled",
+    n_multi = "Overs with multiple wickets",
+    multi_prop = "Proportion of overs with multiple wickets"
+  ) |>
+  tab_header(
+    title = "Bowlers with the most overs with multiple wickets",
+    subtitle = "Includes bowlers with at least two overs with multiple wickets"
+  ) |>
+  opt_interactive()
+```

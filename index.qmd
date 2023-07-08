@@ -1,0 +1,9 @@
+---
+title: Middle Stump Metrics
+---
+
+The purpose of this site is to provide interesting or unusual statistics about cricket. It is inspired
+by some of the obscure records and statistics that are often mentioned during Test Match Special.
+
+This site uses data sourced from [Cricsheet](http://cricsheet.org/), and is focused on Test matches.
+Cricsheet includes Test matches from approximately 2002 onwards, and is updated regularly.
