@@ -26,6 +26,7 @@ jobs:
           name: output.db
           path: output.db
   build-site:
+    runs-on: ubuntu-latest
     needs: load-data
     env:
       DB_LOCATION: output.db
