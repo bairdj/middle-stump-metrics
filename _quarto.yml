@@ -15,6 +15,7 @@ website:
           - analyses/close-matches.qmd
           - analyses/multi-wicket-over.qmd
           - analyses/best-spells.qmd
+          - analyses/4th-innings-targets.qmd
 
 
 format:

@@ -1,0 +1,219 @@
+---
+title: 4th innings targets
+author: James Baird
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(here)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(gt)
+source(here("R", "model.R"))
+source(here("R", "plot.R"))
+
+db <- Model$new()
+```
+
+This analysis examines 4th innings targets, and shows the proportion of observed
+match outcomes for each target. This therefore provides an indication of whether
+a score is defendable or not.
+
+Matches where a team followed-on, or the match did
+not reach a 4th innings, are excluded.
+
+```{r}
+# Exclude follow-ons by ensuring no team
+# bats twice in a row
+follow_ons <-
+  db$table("Innings") |>
+  group_by(MatchId) |>
+  mutate(
+    consecutive = BattingTeam == lag(BattingTeam, order_by = InningsNumber)
+  ) |>
+  summarise(
+    follow_on = any(consecutive, na.rm = TRUE)
+  ) |>
+  filter(follow_on) |>
+  select(MatchId)
+
+# Get total scores per innings
+innings_totals <-
+  db$table("Delivery") |>
+  anti_join(follow_ons, join_by(MatchId)) |>
+  group_by(MatchId, InningsNumber) |>
+  summarise(
+    innings_total = sum(TotalRuns),
+    .groups = "drop"
+  )
+
+# Identify targets (1st + 3rd innings - 2nd innings + 1)
+targets <-
+  innings_totals |>
+  pivot_wider(
+    names_from = InningsNumber,
+    names_prefix = "innings_",
+    values_from = innings_total
+  ) |>
+  # Only include matches that had a 4th innings
+  filter(!is.na(innings_4)) |>
+  mutate(target = innings_1 + innings_3 - innings_2 + 1)
+
+# Identify the team batting 4th, and compare to outcome
+outcomes <-
+  db$table("Innings") |>
+  filter(InningsNumber == 4) |>
+  inner_join(db$table("Match"), join_by(MatchId)) |>
+  transmute(
+    MatchId,
+    result = case_when(
+      BattingTeam == Winner ~ "batting_win",
+      Result == "draw" ~ "draw",
+      Result == "tie" ~ "tie",
+      TRUE ~ "bowling_win"
+    )
+  )
+
+results <-
+  targets |>
+  inner_join(outcomes, join_by(MatchId)) |>
+  select(MatchId, target, result, starts_with("innings_")) |>
+  collect() |>
+  mutate(
+    result = factor(
+      result,
+      levels = c("batting_win", "draw", "tie", "bowling_win"),
+      labels = c("Batting side win", "Draw", "Tie", "Bowling side win")
+    )
+  )
+```
+
+# Outcomes by target
+
+::: {.panel-tabset}
+
+## Counts
+
+```{r}
+base_plot <-
+  results |>
+  ggplot(aes(x = target, fill = result)) +
+  theme_cricket() +
+  labs(
+    x = "Target",
+    y = "Number of matches"
+  ) +
+  scale_x_continuous(
+    breaks = ~ seq(0, .x[2], 50)
+  ) +
+  scale_fill_discrete(
+    guide = guide_legend(title = NULL)
+  )
+
+base_plot +
+  stat_bin(binwidth = 25)
+```
+
+## Proportions
+
+```{r}
+base_plot +
+  stat_bin(binwidth = 25, position = "fill") +
+  scale_y_continuous(
+    labels = scales::percent_format()
+  )
+```
+
+:::
+
+# Probability of winning given a target
+
+This shows a logistic regression model for the probability
+of the batting side successfully chasing a target.
+
+It does not include draws or ties, thus, it may overestimate winning probabilities because the
+batting side may not have time to reach the target.
+
+It does not include other factors that are likely
+to affect the outcome, such as the venue, the teams,
+or the number of runs already scored in the match.
+
+::: {.panel-tabset}
+
+## Model predictions
+
+```{r}
+# Only include wins and losses
+lr_data <-
+  results |>
+  filter(result != "Draw" & result != "Tie") |>
+  transmute(
+    target,
+    chased = result == "Batting side win",
+    innings_2
+  )
+
+lr_model <-
+  glm(chased ~ target, data = lr_data, family = binomial())
+
+targets <- 1:600
+predictions <- predict(
+  lr_model,
+  newdata = data.frame(target = targets),
+  type = "response"
+)
+
+pred_data <-
+  tibble(
+    target = targets,
+    probability = predictions
+  )
+
+pred_data |>
+  ggplot(aes(x = target, y = probability)) +
+  geom_line() +
+  theme_cricket() +
+  labs(
+    x = "Target",
+    y = "Probability of batting side winning"
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format()
+  )
+```
+
+## Model diagnostics
+
+```{r}
+plot(lr_model, which = 1)
+```
+
+## Prediction table
+
+```{r}
+tibble(
+  target = seq(25, 600, 25)
+) |>
+  mutate(
+    probability = predict(
+      lr_model,
+      newdata = data.frame(target = target),
+      type = "response"
+    )
+  ) |>
+  gt() |>
+  fmt_percent(probability, decimals = 1) |>
+  cols_label(
+    target = "Target",
+    probability = "Probability of batting side winning"
+  ) |>
+  data_color(
+    probability,
+    palette = "RdYlGn"
+  )
+
+```
+
+:::
