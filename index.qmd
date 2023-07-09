@@ -7,3 +7,31 @@ by some of the obscure records and statistics that are often mentioned during Te
 
 This site uses data sourced from [Cricsheet](http://cricsheet.org/), and is focused on Test matches.
 Cricsheet includes Test matches from approximately 2002 onwards, and is updated regularly.
+
+```{r}
+#| label: build-time
+#| output: asis
+#| echo: false
+
+# Print the time that the site was built,
+# and the most recent match in the database.
+library(lubridate)
+current_time <- now(tzone = "UTC")
+
+cat("Updated at:", format(current_time, "%Y-%m-%d %H:%M %Z"), "\n\n")
+
+library(dplyr)
+source(here::here("R", "model.R"))
+db <- Model$new()
+most_recent_match <- db$table("Match") |>
+  slice_max(StartDate, n = 1, with_ties = FALSE) |>
+  select(StartDate, Team1, Team2, Venue) |>
+  collect()
+
+most_recent_str <- glue::glue(
+  "Most recent match: ",
+  "{most_recent_match$Team1} vs {most_recent_match$Team2} at {most_recent_match$Venue} on {most_recent_match$StartDate}."
+)
+
+cat(most_recent_str)
+```
