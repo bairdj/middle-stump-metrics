@@ -17,6 +17,7 @@ website:
           - analyses/best-spells.qmd
           - analyses/4th-innings-targets.qmd
           - analyses/stranded-batsmen.qmd
+          - analyses/head_to_head_dominance.qmd
 
 
 format:

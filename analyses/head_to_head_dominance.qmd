@@ -1,0 +1,293 @@
+---
+title: Head-to-head dominance
+author: James Baird
+---
+
+```{r setup, include=FALSE}
+library(here)
+library(dplyr)
+library(gt)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+
+db <- Model$new()
+```
+
+```{r}
+#| label: data-prep
+
+# Get balls that had a dismissal
+wickets <-
+  db$table("Wicket") |>
+  # Only include bowler attributable wickets
+  filter(!Kind %in% !!get_non_bowler_dismissals()) |>
+  select(MatchId, InningsNumber, Over, Ball, Batter) |>
+  mutate(wicket = TRUE)
+
+player_names <-
+  db$table("Player") |>
+  select(PlayerId, Name)
+
+# Get bowler v batsman stats
+head_to_head <-
+  db$table("Delivery") |>
+  left_join(wickets, join_by(MatchId, InningsNumber, Over, Ball, Batter)) |>
+  mutate(wicket = coalesce(wicket, FALSE)) |>
+  group_by(Batter, Bowler) |>
+  summarise(
+    deliveries = n(),
+    runs = sum(BatterRuns),
+    wickets = sum(wicket),
+    .groups = "drop"
+  ) |>
+  mutate(
+    average = runs / as.double(wickets),
+    strike_rate = deliveries / as.double(wickets)
+  ) |>
+  left_join(player_names, by = c("Batter" = "PlayerId")) |>
+  left_join(player_names, by = c("Bowler" = "PlayerId"), suffix = c("_batter", "_bowler")) |>
+  compute()
+
+```
+
+# Bowlers dominating batsmen
+
+::: {.panel-tabset}
+
+## Most dismissals
+
+```{r}
+#| label: most-dismissals
+
+format_dominance <- function(df) {
+  df |>
+    gt() |>
+    cols_label(
+      Name_batter = "Batsman",
+      Name_bowler = "Bowler",
+      deliveries = "Deliveries",
+      runs = "Runs",
+      average = "Average",
+      strike_rate = "Bowling strike rate",
+      wickets = "Wickets"
+    ) |>
+    fmt_integer(
+      columns = c(deliveries, runs, wickets)
+    ) |>
+    fmt_number(
+      columns = c(average, strike_rate),
+      decimals = 2
+    )
+}
+
+head_to_head |>
+  slice_max(wickets, n = 20) |>
+  select(
+    Name_bowler,
+    Name_batter,
+    deliveries,
+    runs,
+    average,
+    strike_rate,
+    wickets
+  ) |>
+  collect() |>
+  format_dominance() |>
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      columns = wickets
+    )
+  ) |>
+  tab_header(
+    title = "Most dismissals by a bowler against a batsman"
+  )
+```
+
+
+## Best average
+
+```{r}
+#| label: best-bowling-average
+head_to_head |>
+  filter(!is.na(average), wickets >= 5) |>
+  slice_min(average, n = 25) |>
+  select(
+    Name_bowler,
+    Name_batter,
+    deliveries,
+    runs,
+    wickets,
+    strike_rate,
+    average
+  ) |>
+  collect() |>
+  format_dominance() |>
+  tab_header(
+    title = "Best bowling average against a batsman",
+    subtitle = "Minimum 5 dismissals"
+  ) |>
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      columns = average
+    )
+  )
+
+```
+
+:::
+
+# Batsmen dominating bowlers
+
+::: {.panel-tabset}
+
+## Most runs
+
+```{r}
+#| label: most-runs
+
+head_to_head |>
+  slice_max(runs, n = 20) |>
+  select(
+    Name_batter,
+    Name_bowler,
+    deliveries,
+    wickets,
+    strike_rate,
+    average,
+    runs
+  ) |>
+  collect() |>
+  format_dominance() |>
+  tab_header(
+    title = "Most runs by a batsman against a bowler"
+  ) |>
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      columns = runs
+    )
+  )
+```
+
+## Best batting average
+
+```{r}
+#| label: best-batting-average
+head_to_head |>
+  filter(!is.na(average), wickets > 1) |>
+  slice_max(average, n = 25) |>
+  select(
+    Name_batter,
+    Name_bowler,
+    deliveries,
+    runs,
+    wickets,
+    strike_rate,
+    average
+  ) |>
+  collect() |>
+  format_dominance() |>
+  tab_header(
+    title = "Best batting average against a bowler",
+    subtitle = "Minimum 2 dismissals"
+  ) |>
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")
+    ),
+    locations = cells_body(
+      columns = average
+    )
+  )
+```
+
+## Most runs without being dismissed
+
+```{r}
+#| label: most-runs-no-dismissal
+head_to_head |>
+  filter(wickets == 0) |>
+  slice_max(runs, n = 20) |>
+  select(
+    Name_batter,
+    Name_bowler,
+    deliveries,
+    runs
+  ) |>
+  collect() |>
+  gt() |>
+  cols_label(
+    Name_batter = "Batsman",
+    Name_bowler = "Bowler",
+    deliveries = "Deliveries",
+    runs = "Runs"
+  ) |>
+  tab_header(
+    title = "Most runs without being dismissed by a bowler"
+  )
+
+```
+
+## Most runs against bowler in an innings
+
+```{r}
+#| label: most-runs-innings
+db$table("Delivery") |>
+  group_by(MatchId, InningsNumber, Batter, Bowler) |>
+  summarise(
+    runs = sum(BatterRuns),
+    deliveries = n(),
+    .groups = "drop"
+  ) |>
+  mutate(strike_rate = runs / as.double(deliveries) * 100) |>
+  left_join(player_names, join_by(Batter == PlayerId)) |>
+  left_join(player_names, join_by(Bowler == PlayerId), suffix = c("_batter", "_bowler")) |>
+  left_join(db$table("Match"), join_by(MatchId)) |>
+  select(
+    StartDate,
+    Venue,
+    Team1,
+    Team2,
+    Name_batter,
+    Name_bowler,
+    deliveries,
+    strike_rate,
+    runs
+  ) |>
+  slice_max(runs, n = 25) |>
+  collect() |>
+  gt() |>
+  common_label() |>
+  cols_label(
+    Name_batter = "Batsman",
+    Name_bowler = "Bowler",
+    deliveries = "Deliveries",
+    runs = "Runs",
+    strike_rate = "Strike rate"
+  ) |>
+  fmt_integer(
+    columns = c(deliveries, runs)
+  ) |>
+  fmt_number(
+    columns = strike_rate,
+    decimals = 2
+  ) |>
+  fmt_date(
+    columns = StartDate,
+    date_style = 7
+  ) |>
+  tab_header(
+    title = "Most runs by a batsman against a bowler in an innings"
+  )
+
+```
+
+:::
