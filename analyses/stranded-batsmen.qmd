@@ -1,0 +1,160 @@
+---
+title: Stranded batsmen
+author: James Baird
+---
+
+A stranded batsman is a batsman who is not out at the end of an innings, where
+the team has been bowled out.
+
+This analysis examines the players who have been stranded the most times,
+the highest scores to be stranded on, and each player's average score when
+stranded.
+
+
+```{r setup, include=FALSE}
+library(here)
+library(dplyr)
+library(gt)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+
+db <- Model$new()
+```
+
+```{r}
+# Identify innings where the team was bowled out
+bowled_out_innings <-
+  db$table("Wicket") |>
+  filter(Kind != "retired hurt") |>
+  count(MatchId, InningsNumber) |>
+  filter(n == 10) |>
+  select(MatchId, InningsNumber)
+
+# Identify runs per innings per batsman
+batter_runs <-
+  db$table("Delivery") |>
+  group_by(MatchId, InningsNumber, Batter) |>
+  summarise(runs = sum(BatterRuns), .groups = "drop")
+
+out_flags <-
+  db$table("Wicket") |>
+  filter(Kind != "retired hurt") |>
+  select(MatchId, InningsNumber, Batter)
+
+stranded <-
+  batter_runs |>
+  semi_join(bowled_out_innings, by = c("MatchId", "InningsNumber")) |>
+  anti_join(out_flags, by = c("MatchId", "InningsNumber", "Batter")) |>
+  compute()
+
+stranded_summary <-
+  stranded |>
+  group_by(Batter) |>
+  summarise(
+    n = n(),
+    mean = mean(runs)
+  ) |>
+  left_join(db$table("Player"), join_by(Batter == PlayerId))
+```
+
+```{r}
+#| label: tbl-most-times-stranded
+#| tbl-cap: Most times stranded
+stranded_summary |>
+  slice_max(n, n = 50) |>
+  select(Name, n, mean) |>
+  collect() |>
+  gt() |>
+  fmt_integer(columns = n) |>
+  fmt_number(columns = mean, decimals = 2) |>
+  cols_label(
+    Name = "Player",
+    n = "Times stranded",
+    mean = "Mean score when stranded"
+  ) |>
+  data_color(mean, palette = "Greens") |>
+  tab_header(
+    title = "Most times stranded"
+  )
+```
+
+```{r}
+#| label: tbl-best-average
+#| tbl-cap: Best average when stranded
+stranded_summary |>
+  filter(n >= 5) |>
+  slice_max(mean, n = 50) |>
+  select(Name, n, mean) |>
+  collect() |>
+  gt() |>
+  fmt_integer(n) |>
+  fmt_number(mean, decimals = 2) |>
+  cols_label(
+    Name = "Player",
+    n = "Times stranded",
+    mean = "Mean score when stranded"
+  ) |>
+  tab_header(
+    title = "Best average when stranded",
+    subtitle = "Minimum 5 innings stranded"
+  )
+```
+
+```{r}
+#| label: tbl-highest-score
+#| tbl-cap: Highest scores when stranded
+
+stranded |>
+  slice_max(runs, n = 50) |>
+  left_join(db$table("Player"), join_by(Batter == PlayerId)) |>
+  left_join(db$table("Match"), join_by(MatchId)) |>
+  select(
+    StartDate,
+    Team1,
+    Team2,
+    Name,
+    runs
+  ) |>
+  collect() |>
+  gt() |>
+  common_label() |>
+  fmt_integer(runs) |>
+  cols_label(
+    runs = "Score",
+    Name = "Player"
+  ) |>
+  fmt_date(StartDate, date_style = 7) |>
+  tab_header(
+    title = "Highest scores when stranded"
+  )
+```
+
+```{r}
+#| label: tbl-stranded-90s
+#| tbl-cap: Stranded in the 90s
+
+stranded |>
+  filter(between(runs, 90, 99)) |>
+  inner_join(db$table("Player"), join_by(Batter == PlayerId)) |>
+  inner_join(db$table("Match"), join_by(MatchId)) |>
+  select(
+    StartDate,
+    Team1,
+    Team2,
+    Name,
+    runs
+  ) |>
+  arrange(desc(runs), desc(StartDate)) |>
+  collect() |>
+  gt() |>
+  common_label() |>
+  fmt_integer(runs) |>
+  cols_label(
+    runs = "Score",
+    Name = "Player"
+  ) |>
+  fmt_date(StartDate, date_style = 7) |>
+  tab_header(
+    title = "Stranded in the 90s"
+  )
+```

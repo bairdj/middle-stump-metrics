@@ -16,6 +16,7 @@ website:
           - analyses/multi-wicket-over.qmd
           - analyses/best-spells.qmd
           - analyses/4th-innings-targets.qmd
+          - analyses/stranded-batsmen.qmd
 
 
 format:
