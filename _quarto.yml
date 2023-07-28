@@ -6,6 +6,9 @@ website:
   title: Middle Stump Metrics
   navbar:
     background: primary
+    tools:
+      - icon: github
+        href: https://github.com/bairdj/middle-stump-metrics
   sidebar:
     style: docked
     contents:
