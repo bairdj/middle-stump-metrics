@@ -13,14 +13,7 @@ website:
     style: docked
     contents:
       - section: Analyses
-        contents:
-          - analyses/batting-collapses.qmd
-          - analyses/close-matches.qmd
-          - analyses/multi-wicket-over.qmd
-          - analyses/best-spells.qmd
-          - analyses/4th-innings-targets.qmd
-          - analyses/stranded-batsmen.qmd
-          - analyses/head_to_head_dominance.qmd
+        contents: analyses/*
 
 
 format:

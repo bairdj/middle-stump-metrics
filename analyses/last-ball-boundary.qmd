@@ -1,0 +1,71 @@
+---
+title: Hitting last ball of career for a boundary
+author: James Baird
+---
+
+```{r}
+#| label: setup
+#| include: FALSE
+library(here)
+library(dplyr)
+library(gt)
+library(purrr)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+
+db <- Model$new()
+```
+
+These tables show players whose last recorded ball faced in
+Test cricket was hit for 4 or 6.
+
+The analysis was inspired by Stuart Broad's effort in his
+final Test innings at the Oval in 2023.
+
+The analysis assumes that players will not play another match, so current players may transiently appear in the
+tables until a subsequent innings is recorded.
+
+
+```{r}
+#| label: data-prep
+
+# Get the index of each delivery faced, ordered by
+# start date of match, innings number, over and ball
+last_ball <-
+  db$table("Delivery") |>
+  inner_join(db$table("Match"), "MatchId") |>
+  group_by(Batter) |>
+  arrange(StartDate, InningsNumber, Over, Ball) |>
+  mutate(ball_index = row_number()) |>
+  slice_max(ball_index, n = 1) |>
+  ungroup() |>
+  select(Batter, MatchId, BatterRuns) |>
+  compute()
+```
+
+```{r}
+#| label: player-tables
+#| output: asis
+
+c(4, 6) |>
+  map(function(run) {
+    last_ball |>
+      filter(BatterRuns == !!run) |>
+      inner_join(db$table("Match"), "MatchId") |>
+      inner_join(db$table("Player"), join_by(Batter == PlayerId)) |>
+      select(StartDate, Name) |>
+      arrange(StartDate) |>
+      collect() |>
+      gt() |>
+      tab_header(
+        title = glue::glue("Last ball for {run}"),
+        subtitle = glue::glue(
+          "Players who hit the last ball of their Test
+          career for {run}"
+        )
+      ) |>
+      fmt_date(StartDate, date_style = 7) |>
+      common_label()
+  }) |>
+  walk(print)
+```
