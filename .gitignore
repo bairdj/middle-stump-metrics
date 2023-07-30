@@ -2,3 +2,4 @@ _environment
 /.quarto/
 _site/
 .Renviron
+.drafts/
