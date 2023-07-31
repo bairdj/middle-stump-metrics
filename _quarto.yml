@@ -11,9 +11,7 @@ website:
         href: https://github.com/bairdj/middle-stump-metrics
   sidebar:
     style: docked
-    contents:
-      - section: Analyses
-        contents: analyses/*
+    contents: analyses
 
 
 format:

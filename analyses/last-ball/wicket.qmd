@@ -1,0 +1,67 @@
+---
+title: Wicket with last ball of career
+author: James Baird
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(here)
+library(dplyr)
+library(dbplyr)
+library(gt)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+
+db <- Model$new()
+```
+
+This analysis looks for players who took a wicket with
+the last ball of their career. If the player did not bowl
+in the final match of their career, they will be included
+based on the match where they bowled their final ball.
+Bowlers will commonly appear here if they took the 10th
+wicket in the 3rd or 4th innings of the most recent Test
+their team played.
+
+This analysis assumes that players will not play another match, thus players who are still playing may transiently
+appear in this list until they bowl in another match.
+
+```{r}
+#| label: data-prep
+
+# Index each bowler's deliveries and get last ball per bowler
+last_ball <-
+  db$table("Delivery") |>
+  inner_join(db$table("Match"), join_by(MatchId)) |>
+  group_by(Bowler) |>
+  window_order(StartDate, InningsNumber, Over, Ball) |>
+  mutate(
+    delivery_index = row_number()
+  ) |>
+  slice_max(delivery_index, n = 1) |>
+  ungroup() |>
+  select(Bowler, MatchId, InningsNumber, Over, Ball) |>
+  compute()
+
+# Get wickets (excluding non-bowler dismissals)
+wickets <-
+  db$table("Wicket") |>
+  filter(!Kind %in% !!get_non_bowler_dismissals()) |>
+  select(Bowler, InningsNumber, Over, Ball)
+
+last_ball |>
+  inner_join(wickets, join_by(Bowler, InningsNumber, Over, Ball)) |>
+  inner_join(db$table("Match"), join_by(MatchId)) |>
+  inner_join(db$table("Player"), join_by(Bowler == PlayerId)) |>
+  select(StartDate, Name) |>
+  arrange(StartDate) |>
+  collect() |>
+  gt() |>
+  common_label() |>
+  fmt_date(StartDate, date_style = 7) |>
+  tab_header(
+    title = "Wicket with last ball of career"
+  )
+```
