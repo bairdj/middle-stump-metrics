@@ -148,7 +148,7 @@ or the number of runs already scored in the match.
 # Only include wins and losses
 lr_data <-
   results |>
-  filter(result != "Draw" & result != "Tie") |>
+  filter(result != "Draw", result != "Tie") |>
   transmute(
     target,
     chased = result == "Batting side win",
@@ -213,7 +213,6 @@ tibble(
     probability,
     palette = "RdYlGn"
   )
-
 ```
 
 :::
