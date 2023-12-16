@@ -76,7 +76,7 @@ cumulative_bowling |>
   pivot_longer(
     starts_with("lag_"),
     names_to = c(".value", "n_streak"),
-    names_pattern = "lag_(\\D+)_(\\d+)",
+    names_pattern = "lag_(\\D+)_(\\d+)", # nolint
     names_transform = list(n_streak = as.integer),
     values_drop_na = TRUE
   ) |>

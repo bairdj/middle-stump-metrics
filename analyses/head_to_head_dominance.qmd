@@ -44,8 +44,12 @@ head_to_head <-
     average = runs / as.double(wickets),
     strike_rate = deliveries / as.double(wickets)
   ) |>
-  left_join(player_names, by = c("Batter" = "PlayerId")) |>
-  left_join(player_names, by = c("Bowler" = "PlayerId"), suffix = c("_batter", "_bowler")) |>
+  left_join(player_names, by = c(Batter = "PlayerId")) |>
+  left_join(
+    player_names,
+    by = c(Bowler = "PlayerId"),
+    suffix = c("_batter", "_bowler")
+  ) |>
   compute()
 
 ```
@@ -249,7 +253,11 @@ db$table("Delivery") |>
   ) |>
   mutate(strike_rate = runs / as.double(deliveries) * 100) |>
   left_join(player_names, join_by(Batter == PlayerId)) |>
-  left_join(player_names, join_by(Bowler == PlayerId), suffix = c("_batter", "_bowler")) |>
+  left_join(
+    player_names,
+    join_by(Bowler == PlayerId),
+    suffix = c("_batter", "_bowler")
+  ) |>
   left_join(db$table("Match"), join_by(MatchId)) |>
   select(
     StartDate,
@@ -287,7 +295,6 @@ db$table("Delivery") |>
   tab_header(
     title = "Most runs by a batsman against a bowler in an innings"
   )
-
 ```
 
 :::

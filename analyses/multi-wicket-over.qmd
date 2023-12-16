@@ -57,13 +57,13 @@ of at least one multi-wicket over in a match is quite common.
 ```{r}
 n_multi_wickets <-
   all_overs |>
-    group_by(MatchId) |>
-    summarise(
-      n_multi = sum(n_wickets > 1),
-      .groups = "drop"
-    ) |>
-    count(n_multi) |>
-    collect()
+  group_by(MatchId) |>
+  summarise(
+    n_multi = sum(n_wickets > 1),
+    .groups = "drop"
+  ) |>
+  count(n_multi) |>
+  collect()
 
 n_multi_wickets |>
   ggplot(aes(x = n_multi, y = n)) +
@@ -102,7 +102,7 @@ wickets_per_over |>
   fmt_integer(n) |>
   fmt_date(
     StartDate,
-    date_style = "day_month_year" 
+    date_style = "day_month_year"
   ) |>
   cols_label(
     Venue = "Venue",
@@ -136,38 +136,38 @@ eligible_wickets <-
 # Get distinct overs per bowler
 bowler_wicket_overs <-
   eligible_wickets |>
-    group_by(MatchId, InningsNumber, Over, Bowler) |>
-    summarise(n_wickets_in_over = n(), .groups = "drop")
+  group_by(MatchId, InningsNumber, Over, Bowler) |>
+  summarise(n_wickets_in_over = n(), .groups = "drop")
 
 # Count total number of overs bowled per bowler
 all_bowler_overs <-
   db$table("Delivery") |>
-    distinct(MatchId, InningsNumber, Over, Bowler) |>
-    left_join(
-      bowler_wicket_overs,
-      join_by(MatchId, InningsNumber, Over, Bowler)
-    ) |>
-    mutate(n_wickets_in_over = coalesce(n_wickets_in_over, 0))
+  distinct(MatchId, InningsNumber, Over, Bowler) |>
+  left_join(
+    bowler_wicket_overs,
+    join_by(MatchId, InningsNumber, Over, Bowler)
+  ) |>
+  mutate(n_wickets_in_over = coalesce(n_wickets_in_over, 0))
 
 
 multi_bowler_summary <-
   all_bowler_overs |>
-    group_by(Bowler) |>
-    summarise(
-      n_overs = n(),
-      n_multi = sum(n_wickets_in_over > 1)
-    ) |>
-    mutate(multi_prop = n_multi / as.double(n_overs)) |>
-    filter(n_multi > 1) |>
-    left_join(
-      db$table("Player"),
-      join_by(Bowler == PlayerId)
-    ) |>
-    select(Name, n_overs, n_multi, multi_prop) |>
-    arrange(desc(n_multi)) |>
-    collect()
-  
-multi_bowler_summary |> 
+  group_by(Bowler) |>
+  summarise(
+    n_overs = n(),
+    n_multi = sum(n_wickets_in_over > 1)
+  ) |>
+  mutate(multi_prop = n_multi / as.double(n_overs)) |>
+  filter(n_multi > 1) |>
+  left_join(
+    db$table("Player"),
+    join_by(Bowler == PlayerId)
+  ) |>
+  select(Name, n_overs, n_multi, multi_prop) |>
+  arrange(desc(n_multi)) |>
+  collect()
+
+multi_bowler_summary |>
   gt() |>
   fmt_integer(n_overs, n_multi) |>
   fmt_percent(multi_prop) |>
