@@ -1,0 +1,5 @@
+linters: all_linters(
+    undesirable_function_linter = undesirable_function_linter(fun = modify_defaults(default_undesirable_functions, library = NULL, source = NULL)),
+    implicit_integer_linter = NULL,
+    extraction_operator_linter = NULL
+  )

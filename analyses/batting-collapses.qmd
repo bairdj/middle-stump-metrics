@@ -11,10 +11,9 @@ library(here)
 library(dplyr)
 library(gt)
 library(tidyr)
-library(slider)
 source(here("R", "model.R"))
 
-db <- Model$new() 
+db <- Model$new()
 ```
 
 Batting collapses are identified by comparing the score at each fall of
@@ -50,7 +49,10 @@ innings_progression <-
 collapse_range <- 2:10
 names(collapse_range) <- paste0("collapse_", collapse_range)
 
-lag_exprs <- purrr::map(collapse_range, ~ expr(cum_runs - lag(cum_runs, !!.x - 1)))
+lag_exprs <- purrr::map(
+  collapse_range,
+  ~ expr(cum_runs - lag(cum_runs, !!.x - 1))
+)
 
 innings_progression |>
   filter(cum_wickets > 0) |>
@@ -69,7 +71,10 @@ innings_progression |>
   filter(collapse_wickets >= 5) |>
   group_by(collapse_wickets) |>
   slice_min(runs, n = 10, with_ties = TRUE) |>
-  inner_join(collect(db$table("Innings")), by = c("MatchId", "InningsNumber")) |>
+  inner_join(
+    collect(db$table("Innings")),
+    by = c("MatchId", "InningsNumber")
+  ) |>
   inner_join(collect(db$table("Match")), by = "MatchId") |>
   select(
     StartDate,
