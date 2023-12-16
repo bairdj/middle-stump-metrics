@@ -1,0 +1,116 @@
+---
+title: Differences in home and away batting performance
+author: James Baird
+---
+
+This analysis considers the difference between batters'
+home and away averages.
+
+This analysis is inspired by David Warner, who is frequently
+criticised for his poor performance outside Australia.
+
+```{r setup, include=FALSE}
+library(here)
+library(dplyr)
+library(tidyr)
+library(gt)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+source(here("R", "plot.R"))
+
+db <- Model$new()
+```
+
+```{r}
+# Classify innings as being home or away
+match_classifications <-
+  db$table("match") |>
+  select(MatchId, home = Team1, away = Team2) |>
+  pivot_longer(c(home, away), names_to = "team_type", values_to = "team")
+
+# Classify each innings as home/away
+innings_classification <-
+  db$table("innings") |>
+  inner_join(match_classifications, join_by(MatchId, BattingTeam == team)) |>
+  select(MatchId, InningsNumber, team_type)
+
+# Identify if the batsman was dismissed during the innings
+dismissals <- db$table("Wicket") |>
+  distinct(MatchId, InningsNumber, Batter) |>
+  mutate(dismissed = TRUE)
+
+# Get runs per batsman per innings
+batter_runs <-
+  db$table("delivery") |>
+  group_by(MatchId, InningsNumber, Batter) |>
+  summarise(runs = sum(BatterRuns), .groups = "drop") |>
+  inner_join(innings_classification, join_by(MatchId, InningsNumber)) |>
+  left_join(dismissals, join_by(MatchId, InningsNumber, Batter)) |>
+  mutate(dismissed = coalesce(dismissed, FALSE)) |>
+  collect()
+```
+
+```{r}
+batter_summary <-
+  batter_runs |>
+  group_by(Batter, team_type) |>
+  summarise(
+    n_innings = n(),
+    runs = sum(runs),
+    dismissals = sum(dismissed),
+    .groups = "drop"
+  ) |>
+  mutate(average = runs / dismissals) |>
+  mutate(team_type = factor(team_type, levels = c("home", "away")))
+
+minimum_innings <- 5L
+
+player_names <- db$table("Player") |>
+  select(PlayerId, Name) |>
+  collect()
+
+batter_summary |>
+  pivot_wider(
+    names_from = team_type,
+    values_from = c(n_innings, runs, dismissals, average)
+  ) |>
+  filter(
+    n_innings_home >= minimum_innings,
+    n_innings_away >= minimum_innings
+  ) |>
+  mutate(home_difference = average_home - average_away) |>
+  slice_max(home_difference, n = 25) |>
+  inner_join(player_names, join_by(Batter == PlayerId)) |>
+  relocate(Name) |>
+  select(-Batter) |>
+  gt(rowname_col = "Name") |>
+  cols_label(
+    starts_with("n_innings") ~ "Innings",
+    starts_with("runs") ~ "Runs",
+    starts_with("dismissals") ~ "Dismissals",
+    starts_with("average") ~ "Average",
+    home_difference ~ "Home difference"
+  ) |>
+  fmt_number(
+    columns = c(
+      starts_with("n_innings"),
+      starts_with("runs"),
+      starts_with("dismissals")
+    ),
+    decimals = 0
+  ) |>
+  fmt_number(starts_with("average_"), decimals = 2) |>
+  fmt_number(home_difference, decimals = 2, force_sign = TRUE) |>
+  tab_header(
+    "Top 25 players with the largest difference between home and away average"
+  ) |>
+  tab_spanner("Home", ends_with("_home")) |>
+  tab_spanner("Away", ends_with("_away")) |>
+  tab_footnote(
+    "Minimum 5 innings at home and away"
+  ) |>
+  tab_style(
+    cell_text(weight = "bold"),
+    locations = cells_body(columns = starts_with("average_"))
+  )
+```
