@@ -13,6 +13,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: bairdj/parse-cricsheet
+          ref: v1.1.0
       - name: Download Cricsheet data
         run: |
           wget https://cricsheet.org/downloads/tests_male_json.zip
