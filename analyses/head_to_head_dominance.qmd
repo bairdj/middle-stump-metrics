@@ -26,7 +26,8 @@ wickets <-
 
 player_names <-
   db$table("Player") |>
-  select(PlayerId, Name)
+  mutate(link = !!create_player_link_expr(Name, KeyCricinfo)) |>
+  select(PlayerId, Name, link)
 
 # Get bowler v batsman stats
 head_to_head <-
@@ -51,7 +52,6 @@ head_to_head <-
     suffix = c("_batter", "_bowler")
   ) |>
   compute()
-
 ```
 
 # Bowlers dominating batsmen
@@ -67,8 +67,8 @@ format_dominance <- function(df) {
   df |>
     gt() |>
     cols_label(
-      Name_batter = "Batsman",
-      Name_bowler = "Bowler",
+      link_batter = "Batsman",
+      link_bowler = "Bowler",
       deliveries = "Deliveries",
       runs = "Runs",
       average = "Average",
@@ -81,14 +81,15 @@ format_dominance <- function(df) {
     fmt_number(
       columns = c(average, strike_rate),
       decimals = 2
-    )
+    ) |>
+    fmt_markdown(starts_with("link_"))
 }
 
 head_to_head |>
   slice_max(wickets, n = 20) |>
   select(
-    Name_bowler,
-    Name_batter,
+    link_bowler,
+    link_batter,
     deliveries,
     runs,
     average,
@@ -119,8 +120,8 @@ head_to_head |>
   filter(!is.na(average), wickets >= 5) |>
   slice_min(average, n = 25) |>
   select(
-    Name_bowler,
-    Name_batter,
+    link_bowler,
+    link_batter,
     deliveries,
     runs,
     wickets,
@@ -158,8 +159,8 @@ head_to_head |>
 head_to_head |>
   slice_max(runs, n = 20) |>
   select(
-    Name_batter,
-    Name_bowler,
+    link_batter,
+    link_bowler,
     deliveries,
     wickets,
     strike_rate,
@@ -189,8 +190,8 @@ head_to_head |>
   filter(!is.na(average), wickets > 1) |>
   slice_max(average, n = 25) |>
   select(
-    Name_batter,
-    Name_bowler,
+    link_batter,
+    link_bowler,
     deliveries,
     runs,
     wickets,
@@ -221,28 +222,35 @@ head_to_head |>
   filter(wickets == 0) |>
   slice_max(runs, n = 20) |>
   select(
-    Name_batter,
-    Name_bowler,
+    link_batter,
+    link_bowler,
     deliveries,
     runs
   ) |>
   collect() |>
   gt() |>
   cols_label(
-    Name_batter = "Batsman",
-    Name_bowler = "Bowler",
+    link_batter = "Batsman",
+    link_bowler = "Bowler",
     deliveries = "Deliveries",
     runs = "Runs"
   ) |>
   tab_header(
     title = "Most runs without being dismissed by a bowler"
-  )
-
+  ) |>
+  fmt_markdown(starts_with("link_"))
 ```
 
 ## Most runs against bowler in an innings
 
 ```{r}
+match_detail <-
+  db$table("Match") |>
+  mutate(
+    match_link = !!create_match_link_expr("Scorecard", MatchId)
+  ) |>
+  select(MatchId, StartDate, match_link, Venue, Team1, Team2)
+
 #| label: most-runs-innings
 db$table("Delivery") |>
   group_by(MatchId, InningsNumber, Batter, Bowler) |>
@@ -258,28 +266,30 @@ db$table("Delivery") |>
     join_by(Bowler == PlayerId),
     suffix = c("_batter", "_bowler")
   ) |>
-  left_join(db$table("Match"), join_by(MatchId)) |>
+  left_join(match_detail, join_by(MatchId)) |>
   select(
     StartDate,
     Venue,
     Team1,
     Team2,
-    Name_batter,
-    Name_bowler,
+    link_batter,
+    link_bowler,
     deliveries,
     strike_rate,
-    runs
+    runs,
+    match_link
   ) |>
   slice_max(runs, n = 25) |>
   collect() |>
   gt() |>
   common_label() |>
   cols_label(
-    Name_batter = "Batsman",
-    Name_bowler = "Bowler",
+    link_batter = "Batsman",
+    link_bowler = "Bowler",
     deliveries = "Deliveries",
     runs = "Runs",
-    strike_rate = "Strike rate"
+    strike_rate = "Strike rate",
+    match_link = "Link"
   ) |>
   fmt_integer(
     columns = c(deliveries, runs)
@@ -288,13 +298,10 @@ db$table("Delivery") |>
     columns = strike_rate,
     decimals = 2
   ) |>
-  fmt_date(
-    columns = StartDate,
-    date_style = 7
-  ) |>
   tab_header(
     title = "Most runs by a batsman against a bowler in an innings"
-  )
+  ) |>
+  fmt_markdown(contains("link"))
 ```
 
 :::

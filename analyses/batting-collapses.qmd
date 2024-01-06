@@ -12,6 +12,7 @@ library(dplyr)
 library(gt)
 library(tidyr)
 source(here("R", "model.R"))
+source(here("R", "util.R"))
 
 db <- Model$new()
 ```
@@ -54,6 +55,10 @@ lag_exprs <- purrr::map(
   ~ expr(cum_runs - lag(cum_runs, !!.x - 1))
 )
 
+match_detail <-
+  db$table("Match") |>
+  mutate(match_link = !!create_match_link_expr("Scorecard", MatchId))
+
 innings_progression |>
   filter(cum_wickets > 0) |>
   group_by(MatchId, InningsNumber) |>
@@ -75,22 +80,33 @@ innings_progression |>
     collect(db$table("Innings")),
     by = c("MatchId", "InningsNumber")
   ) |>
-  inner_join(collect(db$table("Match")), by = "MatchId") |>
+  inner_join(collect(match_detail), by = "MatchId") |>
   select(
     StartDate,
     Venue,
     collapse_wickets,
     BattingTeam,
     BowlingTeam,
-    Runs = runs
+    Runs = runs,
+    match_link
   ) |>
   mutate(collapse_wickets = paste0(collapse_wickets, " wickets")) |>
   gt() |>
   cols_label(
     StartDate = "Date",
     BattingTeam = "Batting team",
-    BowlingTeam = "Bowling team"
+    BowlingTeam = "Bowling team",
+    match_link = "Scorecard"
   ) |>
-  fmt_date(columns = "StartDate", date_style = 7)
+  fmt_date(columns = "StartDate", date_style = 7) |>
+  fmt_markdown(match_link) |>
+  tab_header(
+    title = "Batting collapses",
+    subtitle = "Lowest scores after losing a given number of wickets"
+  ) |>
+  tab_style(
+    cell_text(weight = "bold", size = "large"),
+    locations = cells_row_groups()
+  )
 ```
 

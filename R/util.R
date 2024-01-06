@@ -34,3 +34,53 @@ common_label <- function(x) {
     !!!filtered_mapping
   )
 }
+
+create_match_url_expr <- function(match_id) {
+  match_id <- rlang::enquo(match_id)
+  rlang::expr(
+    paste0(
+      "https://www.espncricinfo.com/ci/engine/match/",
+      !!match_id,
+      ".html"
+    )
+  )
+}
+
+create_match_link_expr <- function(label, match_id) {
+  label <- rlang::enquo(label)
+  match_id <- rlang::enquo(match_id)
+  rlang::expr(
+    paste0(
+      "[",
+      !!label,
+      "](",
+      !!create_match_url_expr(!!match_id),
+      ")"
+    )
+  )
+}
+
+create_player_url_expr <- function(player_id) {
+  player_id <- rlang::enquo(player_id)
+  rlang::expr(
+    paste0(
+      "https://www.espncricinfo.com/ci/content/player/",
+      !!player_id,
+      ".html"
+    )
+  )
+}
+
+create_player_link_expr <- function(label, player_id) {
+  label <- rlang::enquo(label)
+  player_id <- rlang::enquo(player_id)
+  rlang::expr(
+    paste0(
+      "[",
+      !!label,
+      "](",
+      !!create_player_url_expr(!!player_id),
+      ")"
+    )
+  )
+}
