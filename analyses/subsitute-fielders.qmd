@@ -1,0 +1,109 @@
+---
+title: Substitute fielders
+author: James Baird
+---
+
+This analysis looks at dismissals which involved substitute fielders.
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(here)
+library(gt)
+library(tidyr)
+source(here("R", "model.R"))
+source(here("R", "util.R"))
+
+db <- Model$new()
+```
+
+# Most dismissals as a substitute fielder
+
+```{r}
+sub_dismissals <-
+  db$table("Fielder") |>
+  filter(Substitute) |>
+  # Join to get the mode of dismissal, and the batter
+  inner_join(db$table("Wicket"), join_by(MatchId, InningsNumber, Over, Ball, WicketNumber)) |>
+  select(MatchId, InningsNumber, Over, Ball, Fielder, Kind, Batter)
+
+player_detail <-
+  db$table("Player") |>
+  mutate(link = !!create_player_link_expr(Name, KeyCricinfo)) |>
+  select(PlayerId, link) |>
+  collect()
+
+sub_dismissals |>
+  mutate(
+    Kind = case_match(
+      Kind,
+      "caught" ~ "Caught",
+      "run out" ~ "Run out",
+      "stumped" ~ "Stumped"
+    )
+  ) |>
+  count(Fielder, Kind) |>
+  pivot_wider(
+    names_from = Kind,
+    values_from = n,
+    values_fill = 0,
+    names_sort = TRUE
+  ) |>
+  collect() |>
+  rowwise() |>
+  mutate(
+    total = sum(c_across(-Fielder))
+  ) |>
+  arrange(desc(total)) |>
+  filter(total >= 2) |>
+  inner_join(player_detail, join_by(Fielder == PlayerId)) |>
+  select(-Fielder) |>
+  relocate(link) |>
+  gt() |>
+  fmt_markdown(link) |>
+  cols_label(
+    link = "Fielder",
+    total = "Total"
+  ) |>
+  tab_header(
+    title = "Dismissals as a substitute fielder"
+  ) |>
+  tab_footnote(
+    "Only includes players with at least two dismissals as a substitute fielder."
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(total)
+  )
+```
+
+# Run outs by subtitute fielders
+
+```{r}
+match_detail <-
+  db$table("Match") |>
+  select(MatchId, StartDate) |>
+  mutate(match_link = !!create_match_link_expr("Scorecard", MatchId))
+
+sub_dismissals |>
+  filter(Kind == "run out") |>
+  select(MatchId, InningsNumber, Fielder, Batter) |>
+  inner_join(match_detail, join_by(MatchId)) |>
+  collect() |>
+  inner_join(player_detail, join_by(Fielder == PlayerId)) |>
+  inner_join(player_detail, join_by(Batter == PlayerId), suffix = c("_fielder", "_batter")) |>
+  select(StartDate, InningsNumber, link_fielder, link_batter, match_link) |>
+  arrange(desc(StartDate), InningsNumber) |>
+  gt() |>
+  common_label() |>
+  fmt_markdown(contains("link")) |>
+  cols_label(
+    InningsNumber ~ "Innings",
+    link_fielder = "Fielder",
+    link_batter = "Batter",
+    match_link = "Scorecard"
+  ) |>
+  fmt_date(StartDate, date_style = 7) |>
+  tab_header(
+    title = "Run outs by substitute fielders"
+  )
+```
