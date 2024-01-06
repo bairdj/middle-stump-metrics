@@ -9,6 +9,8 @@ on:
 jobs:
   load-data:
     runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check-db-cache.outputs.cache-hit }}
     steps:
       - name: Checkout parse-cricsheet
         uses: actions/checkout@v3
@@ -40,6 +42,8 @@ jobs:
           name: output.db
           path: output.db
   build-site:
+    # Doesn't need to run if triggered by schedule and DB has not changed
+    if: ${{ github.event_name != 'schedule' || needs.load-data.outputs.cache-hit != 'true' }}
     runs-on: ubuntu-latest
     needs: load-data
     env:
@@ -76,6 +80,7 @@ jobs:
         uses: quarto-dev/quarto-actions/render@v2
         env:
           DB_LOCATION: ${{ steps.download.outputs.download-path }}/output.db
+          RENV_CONFIG_SANDBOX_ENABLED: "FALSE"
         with:
           to: html
       - name: Upload site artifact
